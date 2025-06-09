@@ -1,0 +1,120 @@
+MyShell - A Simple Unix Command Line Interpreter
+================================================
+
+Description
+-----------
+MyShell is a simple shell program developed as part of an Operating Systems course project.
+It allows users to execute both internal and external commands, perform I/O redirection,
+run commands in the background, and execute scripts from batch files.
+
+This shell works in interactive mode or batch mode, and supports a basic set of internal commands.
+
+Internal Commands
+-----------------
+1. cd <directory>
+   - Changes the current working directory to <directory>.
+   - If no directory is provided, it prints the current directory.
+   - If the directory does not exist, an error is displayed.
+   - This also updates the PWD environment variable.
+
+2. clr
+   - Clears the screen.
+
+3. dir <directory>
+   - Lists the contents of the specified directory.
+
+4. environ
+   - Prints all the environment variables.
+
+5. echo <comment>
+   - Displays <comment> on the screen.
+   - Multiple spaces/tabs between words are reduced to one.
+
+6. help
+   - Displays this help manual using the 'more' filter.
+
+7. pause
+   - Pauses the shell until the user presses the Enter key.
+
+8. quit
+   - Exits the shell.
+
+Command Execution
+-----------------
+- Any command not listed above is assumed to be an external program.
+- MyShell uses fork() and execvp() to launch external programs as child processes.
+
+Environment Variables
+---------------------
+- When MyShell starts, it sets the following environment variables:
+    shell  = <full_path_to_myshell_executable>
+    parent = <full_path_to_myshell_executable> (for child processes)
+
+Input/Output Redirection
+------------------------
+- You can redirect input and/or output using the following symbols:
+
+    < inputfile       : reads input from 'inputfile' instead of keyboard
+    > outputfile      : writes output to 'outputfile', overwriting if it exists
+    >> outputfile     : appends output to 'outputfile' if it exists, or creates it
+
+- These redirections also work with internal commands like dir, environ, echo, and help.
+
+Background Execution
+--------------------
+- To execute a command in the background, add '&' at the end:
+
+    example:
+        sleep 10 &
+
+- This runs the command without waiting for it to finish.
+
+Batch Mode
+----------
+- You can run a series of commands from a file by launching MyShell with a filename:
+
+    ./myshell batchfile
+
+- Each line in the file will be treated as a command.
+
+Prompt
+------
+- The shell prompt shows the full path of the current working directory.
+
+Building the Shell
+------------------
+To compile MyShell, type:
+
+    make
+
+This will generate an executable named 'myshell'.
+
+Usage Examples
+--------------
+1. Interactive mode:
+    ./myshell
+
+2. Batch mode:
+    ./myshell script.txt
+
+3. I/O redirection:
+    ls -l > output.txt
+
+4. Background execution:
+    find / -name '*.c' &
+
+5. Combined:
+    sort < input.txt > output.txt &
+
+Notes
+-----
+- All command line tokens must be separated by spaces (including '<', '>', '>>', and '&').
+- Do not include binary files in your submission.
+- Ensure the shell compiles successfully by running 'make' in a clean directory.
+
+Author
+------
+<rawan tareq baker>
+<220221288>
+Operating Systems - Project 1
+
