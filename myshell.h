@@ -1,22 +1,24 @@
-// myshell.h
 #ifndef MYSHELL_H
 #define MYSHELL_H
 
-// تعريف الحد الأقصى للأمر
-#define MAX_COMMAND_SIZE 1024
-#define MAX_TOKENS 100
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <ctype.h>
+#include <dirent.h>
 
-// الدوال المستخدمة
-void execute_command(char **args, int background);
-int is_internal_command(char **args);
-void handle_internal_command(char **args);
-void redirect_input_output(char **args, int *in, int *out, char **input_file, char **output_file, int *append);
-void remove_redirection_tokens(char **args);
-void read_batch_file(const char *filename);
-void display_prompt();
-void trim_whitespace(char *str);
-void parse_command(char *line, char **args, int *background);
-void init_shell_environment();
+#define MAX_LINE 1024
+#define MAX_ARGS 64
+
+#ifndef MAX_PATH
+#define MAX_PATH 1024
+#endif
+
+void clear_screen();
+void list_directory(const char *path);
 
 #endif
 

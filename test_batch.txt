@@ -1,0 +1,16 @@
+echo Welcome to MyShell Test!
+environ
+cd /
+pwd
+dir /tmp
+cd -
+echo This is a test for internal commands.
+pause
+help
+clr
+echo This will go to file > output.txt
+cat < output.txt
+echo Appending >> output.txt
+cat < output.txt
+sleep 2 &
+quit
