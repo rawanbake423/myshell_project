@@ -1,183 +1,196 @@
+// myshell.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include <sys/types.h>
 #include <sys/wait.h>
-#include <ctype.h>
+#include <fcntl.h>
 #include "myshell.h"
-#define PATH_MAX 4096
-extern char **environ;
 
-void trim_newline(char *line) {
-    size_t len = strlen(line);
-    if (len > 0 && line[len - 1] == '\n')
-        line[len - 1] = '\0';
+// عرض المسار الحالي في prompt
+void display_prompt() {
+    char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    printf("%s> ", cwd);
+    fflush(stdout);
 }
 
-void parse_input(char *line, char **args, int *background, char **input_file, char **output_file, int *append) {
+// حذف الفراغات الزائدة في البداية والنهاية
+void trim_whitespace(char *str) {
+    char *end;
+    while (*str == ' ' || *str == '\t') str++;
+    end = str + strlen(str) - 1;
+    while (end > str && (*end == ' ' || *end == '\t' || *end == '\n')) end--;
+    *(end + 1) = '\0';
+}
+
+// تحليل الأمر إلى كلمات مفصولة
+void parse_command(char *line, char **args, int *background) {
     *background = 0;
-    *input_file = NULL;
-    *output_file = NULL;
-    *append = 0;
     int i = 0;
-    char *token = strtok(line, " ");
+    char *token = strtok(line, " \t");
     while (token != NULL) {
-        if (strcmp(token, "<") == 0) {
-            token = strtok(NULL, " ");
-            *input_file = token;
-        } else if (strcmp(token, ">") == 0) {
-            token = strtok(NULL, " ");
-            *output_file = token;
-        } else if (strcmp(token, ">>") == 0) {
-            token = strtok(NULL, " ");
-            *output_file = token;
-            *append = 1;
-        } else if (strcmp(token, "&") == 0) {
+        if (strcmp(token, "&") == 0) {
             *background = 1;
         } else {
             args[i++] = token;
         }
-        token = strtok(NULL, " ");
+        token = strtok(NULL, " \t");
     }
     args[i] = NULL;
 }
 
-int is_internal_command(const char *cmd) {
-    return strcmp(cmd, "clr") == 0 || strcmp(cmd, "dir") == 0 || strcmp(cmd, "environ") == 0 ||
-           strcmp(cmd, "echo") == 0 || strcmp(cmd, "help") == 0 || strcmp(cmd, "pause") == 0 ||
-           strcmp(cmd, "cd") == 0 || strcmp(cmd, "pwd") == 0 || strcmp(cmd, "quit") == 0;
-}
-
-void handle_internal_command(char **args, int in, int out, char *input_file, char *output_file, int append) {
-    int saved_in = dup(STDIN_FILENO);
-    int saved_out = dup(STDOUT_FILENO);
-    int fd;
-
-    if (input_file) {
-        in = open(input_file, O_RDONLY);
-        dup2(in, STDIN_FILENO);
-        close(in);
-    }
-    if (output_file) {
-        fd = open(output_file, append ? O_WRONLY | O_CREAT | O_APPEND : O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-    }
-
-    if (strcmp(args[0], "clr") == 0) {
-        clear_screen();
-    } else if (strcmp(args[0], "dir") == 0) {
-        if (args[1])
-            execlp("ls", "ls", "-al", args[1], NULL);
-        else
-            execlp("ls", "ls", "-al", ".", NULL);
-        perror("ls");
-    } else if (strcmp(args[0], "environ") == 0) {
-        for (char **env = environ; *env; ++env)
-            printf("%s\n", *env);
-    } else if (strcmp(args[0], "echo") == 0) {
-        for (int i = 1; args[i]; ++i)
-            printf("%s ", args[i]);
-        printf("\n");
-    } else if (strcmp(args[0], "help") == 0) {
-        printf("Help: Built-in commands are: clr, dir, environ, echo, help, pause, cd, pwd, quit\n");
-    } else if (strcmp(args[0], "pause") == 0) {
-        printf("Press Enter to continue...");
-        getchar();
-    } else if (strcmp(args[0], "cd") == 0) {
-        if (args[1]) chdir(args[1]);
-    } else if (strcmp(args[0], "pwd") == 0) {
-        char cwd[MAX_PATH];
-        getcwd(cwd, sizeof(cwd));
-        printf("%s\n", cwd);
-    } else if (strcmp(args[0], "quit") == 0) {
-        exit(0);
-    }
-
-    dup2(saved_in, STDIN_FILENO);
-    dup2(saved_out, STDOUT_FILENO);
-    close(saved_in);
-    close(saved_out);
-}
-
-void execute_command(char *line) {
-    char *args[MAX_ARGS];
-    int background = 0, append = 0;
-    char *input_file = NULL, *output_file = NULL;
-
-    trim_newline(line);
-    if (strlen(line) == 0) return;
-
-    parse_input(line, args, &background, &input_file, &output_file, &append);
-    if (!args[0]) return;
-
-    if (is_internal_command(args[0])) {
-        handle_internal_command(args, 0, 1, input_file, output_file, append);
-    } else {
-        pid_t pid = fork();
-        if (pid == 0) {
-            int in, out;
-            if (input_file) {
-                in = open(input_file, O_RDONLY);
-                dup2(in, STDIN_FILENO);
-                close(in);
-            }
-            if (output_file) {
-                out = open(output_file, append ? O_WRONLY | O_CREAT | O_APPEND : O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                dup2(out, STDOUT_FILENO);
-                close(out);
-            }
-            execvp(args[0], args);
-            perror("exec");
-            exit(1);
-        } else {
-            if (!background) waitpid(pid, NULL, 0);
+// إعادة توجيه الإدخال والإخراج
+void redirect_input_output(char **args, int *in, int *out, char **input_file, char **output_file, int *append) {
+    for (int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], "<") == 0 && args[i+1] != NULL) {
+            *in = 1;
+            *input_file = args[i+1];
+            args[i] = NULL;
+        } else if ((strcmp(args[i], ">") == 0 || strcmp(args[i], ">>") == 0) && args[i+1] != NULL) {
+            *out = 1;
+            *append = (strcmp(args[i], ">>") == 0);
+            *output_file = args[i+1];
+            args[i] = NULL;
         }
     }
 }
 
+// تنفيذ الأمر الخارجي
+void execute_command(char **args, int background) {
+    pid_t pid;
+    int in = 0, out = 0, append = 0;
+    char *input_file = NULL, *output_file = NULL;
+
+    redirect_input_output(args, &in, &out, &input_file, &output_file, &append);
+
+    pid = fork();
+    if (pid == 0) {
+        // عملية الطفل
+
+        // إدخال
+        if (in && input_file) {
+            int fd = open(input_file, O_RDONLY);
+            if (fd < 0) {
+                perror("Input redirection");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+        }
+
+        // إخراج
+        if (out && output_file) {
+            int fd = open(output_file, append ? O_WRONLY | O_CREAT | O_APPEND : O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                perror("Output redirection");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+
+        // إعداد متغير البيئة
+        char pathbuf[1024];
+        char shell_path[1024];
+        getcwd(pathbuf, sizeof(pathbuf));
+        if (strlen(pathbuf) + strlen("/myshell") < sizeof(shell_path)) {
+            snprintf(shell_path, sizeof(shell_path), "%s/myshell", pathbuf);
+            setenv("parent", shell_path, 1);
+        } else {
+            fprintf(stderr, "Path too long. Cannot set parent environment variable.\n");
+        }
+
+        // تنفيذ الأمر
+        if (execvp(args[0], args) == -1) {
+            perror("Execution failed");
+            exit(EXIT_FAILURE);
+        }
+
+    } else if (pid > 0) {
+        // العملية الأم
+        if (!background) {
+            waitpid(pid, NULL, 0);
+        }
+    } else {
+        perror("Fork failed");
+    }
+}
+
+// تنفيذ ملف batch
 void read_batch_file(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (!file) {
-        perror("Error opening batch file");
-        return;
+        perror("Batch file");
+        exit(EXIT_FAILURE);
     }
 
-    char line[MAX_LINE];
+    char line[MAX_COMMAND_SIZE];
     while (fgets(line, sizeof(line), file)) {
-        execute_command(line);
+        trim_whitespace(line);
+        if (strlen(line) == 0) continue;
+
+        char *args[MAX_TOKENS];
+        int background = 0;
+        parse_command(line, args, &background);
+
+        if (args[0] == NULL) continue;
+        if (strcmp(args[0], "quit") == 0) break;
+        if (is_internal_command(args)) {
+            handle_internal_command(args);
+        } else {
+            execute_command(args, background);
+        }
     }
     fclose(file);
 }
 
+// تهيئة البيئة الخاصة بالشيل
 void init_shell_environment() {
-    char pathbuf[PATH_MAX];
+    char pathbuf[1024];
+    char shell_path[1024];
     getcwd(pathbuf, sizeof(pathbuf));
-
-    char shell_path[PATH_MAX];
-    snprintf(shell_path, PATH_MAX - 1, "%s/myshell", pathbuf);
-    shell_path[PATH_MAX - 1] = '\0';
-    setenv("shell", shell_path, 1);
+    if (strlen(pathbuf) + strlen("/myshell") < sizeof(shell_path)) {
+        snprintf(shell_path, sizeof(shell_path), "%s/myshell", pathbuf);
+        setenv("shell", shell_path, 1);
+    } else {
+        fprintf(stderr, "Path too long. Cannot set shell environment variable.\n");
+    }
 }
 
+// البرنامج الرئيسي
 int main(int argc, char *argv[]) {
     init_shell_environment();
-    printf("\n\n\n\t+++++++++++++++ OUR SHELL +++++++++++++++\n");
-    printf("\t\t++++++++ rawan , alaa , shahed ++++++++\n");
-    printf("\t....Type 'help' for entire user manual\n");
-    printf("to show the information about the command you want...\n\n\n");
 
+    // إذا وُجد ملف batch
     if (argc == 2) {
         read_batch_file(argv[1]);
         return 0;
     }
 
-    char line[MAX_LINE];
+    // الوضع التفاعلي
+    char line[MAX_COMMAND_SIZE];
+    char *args[MAX_TOKENS];
+    int background;
+
     while (1) {
-        printf("MyShell> ");
-        if (!fgets(line, MAX_LINE, stdin)) break;
-        execute_command(line);
+        display_prompt();
+
+        if (!fgets(line, sizeof(line), stdin)) break;
+        trim_whitespace(line);
+        if (strlen(line) == 0) continue;
+
+        parse_command(line, args, &background);
+
+        if (args[0] == NULL) continue;
+        if (strcmp(args[0], "quit") == 0) break;
+
+        if (is_internal_command(args)) {
+            handle_internal_command(args);
+        } else {
+            execute_command(args, background);
+        }
     }
 
     return 0;
